@@ -1,0 +1,63 @@
+name: Product Service CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  # ── A. PR ONLY: SonarQube + Snyk validation ───────────────────────────────
+  validate:
+    name: Validate (Sonar + Snyk)
+    if: github.event_name == 'pull_request'
+    uses: shopnovaorg/shopnovaorg-shared/.github/workflows/sonar-and-snyk.yaml@main
+    with:
+      service-name: product-service
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # ── B. ALL EVENTS: Build image (Trivy only on PR) ─────────────────────────
+  build:
+    name: Build Image
+    uses: shopnovaorg/shopnovaorg-shared/.github/workflows/generate-tag-and-build-image-trivy.yaml@main
+    with:
+      image-name: abhinavbabu33/shopnova-product-service
+      service-name: product-service
+      run-trivy: ${{ github.event_name == 'pull_request' }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # ── C. PUSH ONLY: Push to DockerHub ──────────────────────────────────────
+  push-image:
+    name: Push to DockerHub
+    needs: build
+    if: github.event_name == 'push'
+    uses: shopnovaorg/shopnovaorg-shared/.github/workflows/push.yaml@main
+    with:
+      image-name: abhinavbabu33/shopnova-product-service
+      image-tag: ${{ needs.build.outputs.image-tag }}
+      service-name: product-service
+      is-main: ${{ github.ref_name == 'main' }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # ── D. ALWAYS: Notify on any failure ─────────────────────────────────────
+  notify:
+    name: Notify on Failure
+    needs: [validate, build, push-image]
+    if: failure()
+    uses: shopnovaorg/shopnovaorg-shared/.github/workflows/notify.yaml@main
+    with:
+      service-name: product-service
+      branch: ${{ github.ref_name }}
+      run-id: ${{ github.run_id }}
+      repository: ${{ github.repository }}
+    secrets:
+      SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+      NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+      NOTIFY_EMAIL_FROM: ${{ secrets.NOTIFY_EMAIL_FROM }}
