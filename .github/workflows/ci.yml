@@ -19,9 +19,15 @@ jobs:
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-  # ── B. ALL EVENTS: Build image (Trivy only on PR) ─────────────────────────
+  # ── B. Build image ─────────────────────────────────────────────────────────
+  # On PR  : runs AFTER validate passes (gate enforced)
+  # On push: validate is skipped → always() lets build proceed regardless
   build:
     name: Build Image
+    needs: [validate]
+    if: |
+      always() &&
+      (github.event_name == 'push' || needs.validate.result == 'success')
     uses: shopnovaorg/shopnovaorg-shared/.github/workflows/generate-tag-and-build-image-trivy.yaml@main
     with:
       image-name: abhinavbabu33/shopnova-product-service
@@ -34,14 +40,18 @@ jobs:
   # ── C. PUSH ONLY: Push to DockerHub ──────────────────────────────────────
   push-image:
     name: Push to DockerHub
-    needs: build
-    if: github.event_name == 'push'
+    needs: [build]
+    if: |
+       always() &&
+       github.event_name == 'push' &&
+       needs.build.result == 'success'
     uses: shopnovaorg/shopnovaorg-shared/.github/workflows/push.yaml@main
     with:
       image-name: abhinavbabu33/shopnova-product-service
       image-tag: ${{ needs.build.outputs.image-tag }}
       service-name: product-service
       is-main: ${{ github.ref_name == 'main' }}
+      tag-exists: ${{ needs.build.outputs.tag-exists }}
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -50,13 +60,17 @@ jobs:
   notify:
     name: Notify on Failure
     needs: [validate, build, push-image]
-    if: failure()
+    if: always()
     uses: shopnovaorg/shopnovaorg-shared/.github/workflows/notify.yaml@main
     with:
       service-name: product-service
       branch: ${{ github.ref_name }}
       run-id: ${{ github.run_id }}
       repository: ${{ github.repository }}
+      git-tag: ${{ needs.build.outputs.image-tag }}
+      sonarqube-result: ${{ needs.validate.result }}
+      build-result: ${{ needs.build.result }}
+      push-result: ${{ needs.push-image.result }}
     secrets:
       SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
       NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
