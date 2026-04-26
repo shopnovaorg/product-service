@@ -58,10 +58,59 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
-  # ── D. ALWAYS: Notify on any failure ─────────────────────────────────────
+  # ── D. DEV PUSH ONLY: Update Helm values (dev branch) ────────────────────
+  update-helm-dev:
+    name: Update Helm Values (dev)
+    needs: [build, push-image]
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref_name == 'dev' &&
+      needs.push-image.result == 'success'
+    uses: shopnovaorg/shopnovaorg-shared/.github/workflows/helm-updater.yaml@main
+    with:
+      service-name: product-service
+      image-tag: ${{ needs.build.outputs.image-tag }}
+      helm-values-path: shopnova-micro-apps/product-service/values.dev.yaml
+      target-branch: dev
+    secrets:
+      HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
+
+  # ── E. MAIN PUSH ONLY: Manual prod approval gate ──────────────────────────
+  prod-approval-gate:
+    name: Prod Approval Gate
+    needs: [build, push-image]
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref_name == 'main' &&
+      needs.push-image.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Approved — proceeding to Helm prod update
+        run: echo "✅ Approved for tag ${{ needs.build.outputs.image-tag }}"
+
+  # ── F. MAIN PUSH ONLY: Update Helm values (prod, main branch) ────────────
+  update-helm-prod:
+    name: Update Helm Values (prod)
+    needs: [build, prod-approval-gate]
+    if: |
+      always() &&
+      needs.prod-approval-gate.result == 'success'
+    uses: shopnovaorg/shopnovaorg-shared/.github/workflows/helm-updater.yaml@main
+    with:
+      service-name: product-service
+      image-tag: ${{ needs.build.outputs.image-tag }}
+      helm-values-path: shopnova-micro-apps/product-service/values.yaml
+      target-branch: main
+    secrets:
+      HELM_CHARTS_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN }}
+
+  # ── G. ALWAYS: Notify on any failure ─────────────────────────────────────
   notify:
     name: Notify on Failure
-    needs: [validate, build, push-image]
+    needs: [validate, build, push-image, update-helm-dev, prod-approval-gate, update-helm-prod]
     if: always()
     uses: shopnovaorg/shopnovaorg-shared/.github/workflows/notify.yaml@main
     with:
