@@ -5,6 +5,8 @@ on:
     branches: [main, dev]
   push:
     branches: [main, dev]
+permissions:
+  contents: write
 
 jobs:
   # ── A. PR ONLY: SonarQube + Snyk validation ───────────────────────────────
