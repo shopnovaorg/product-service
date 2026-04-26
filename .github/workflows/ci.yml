@@ -57,19 +57,17 @@ jobs:
   notify:
     name: Notify on Failure
     needs: [validate, build, push-image]
-    if: |
-      always() &&
-      (
-        needs.validate.result   == 'failure' ||
-        needs.build.result      == 'failure' ||
-        needs.push-image.result == 'failure'
-      )
+    if: always()
     uses: shopnovaorg/shopnovaorg-shared/.github/workflows/notify.yaml@main
     with:
       service-name: product-service
       branch: ${{ github.ref_name }}
       run-id: ${{ github.run_id }}
       repository: ${{ github.repository }}
+      git-tag: ${{ needs.build.outputs.image-tag }}
+      sonarqube-result: ${{ needs.validate.result }}
+      build-result: ${{ needs.build.result }}
+      push-result: ${{ needs.push-image.result }}
     secrets:
       SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
       NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
