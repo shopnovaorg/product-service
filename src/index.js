@@ -19,7 +19,7 @@ app.use(express.json());
 app.use("/api/products", productRoutes);
 
 // Health check
-app.get("/health", (_req, res) => res.json({ status: "ok", service: "product-service" }));
+app.get("/health", (_req, res) => res.json({ status: "ok", service: "productservice" }));
 
 app.listen(PORT, () => {
   console.log(`[product-service] Running on port ${PORT}`);
